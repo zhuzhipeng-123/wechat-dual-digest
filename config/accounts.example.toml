@@ -1,0 +1,7 @@
+[[recruitment]]
+name = "国聘"
+
+[[practice]]
+name = "我爱学逻辑"
+include = ["每日一题"]
+exclude = []

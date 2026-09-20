@@ -1,0 +1,18 @@
+{% extends "base.html.j2" %}
+{% block title %}招聘日报 · {{ report.target_date }}{% endblock %}
+{% block heading %}招聘日报{% endblock %}
+{% block content %}
+  {% if report.analysis_status.value != "ok" %}<p class="notice">分析待补充。原文已保留，但当前结果不得解释为“没有招聘”。</p>{% endif %}
+  {% for article in report.articles %}<article>
+    <h2>{{ article.title }}</h2><p>{{ article.account }} · {{ article.publish_time }}</p>
+    {% for company in article.companies|default([]) %}<section>
+      <h3><span class="tag">{{ company.rating }}</span>{{ company.company }}</h3>
+      <p>{{ company.employer_type }} · {{ company.company_scale }}</p>
+      <ul>{% for job in company.jobs %}<li>{{ job.name }}｜{{ job.locations|join('、') if job.locations else '地点待核实' }}</li>{% endfor %}</ul>
+    </section>{% endfor %}
+    <p><a href="{{ article.url }}" rel="noopener noreferrer">打开唯一原文入口</a></p>
+  </article>{% else %}
+    {% if report.source_status.value == "empty" %}<p class="notice">本次搜索成功但未发现候选，不能据此断言公众号没有发文。</p>{% else %}<p class="notice">数据源受阻或尚未验证，不能解释为零招聘。</p>{% endif %}
+  {% endfor %}
+  {% for article in report.pending %}<article><h2>{{ article.title }}</h2><p>分析或时间待核实。</p><a href="{{ article.url }}" rel="noopener noreferrer">打开唯一原文入口</a></article>{% endfor %}
+{% endblock %}

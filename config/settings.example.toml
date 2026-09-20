@@ -1,0 +1,15 @@
+timezone = "Asia/Shanghai"
+total_timeout_seconds = 1800
+
+[recruitment]
+enabled = true
+schedule = "21:00"
+analysis_enabled = true
+
+[practice]
+enabled = true
+schedule = "21:00"
+
+[browser]
+channel = "chrome"
+headless = false
