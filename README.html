@@ -67,31 +67,31 @@
 <body>
   <header>
     <div class="shell">
-      <div class="eyebrow">Local dispatch / first MVP</div>
+      <div class="eyebrow">Source → archive → dispatch</div>
       <h1>微信文章，沿两条轨道抵达。</h1>
-      <p class="lede">本机运行的练习与招聘双日报工具。它把搜索、原文核时、证据、分析和发布拆开记录，让失败可见，也让“未发现”和“没有发文”保持不同。</p>
+      <p class="lede">本机运行的练习与招聘双日报工具。它从一个明确配置的订阅源发现候选，再用微信原文核对身份和时间，保存正文与图片，最后生成本地报告或通过邮件送达。</p>
       <div class="rails" aria-label="两份日报"><div class="rail practice">练习：原文与可用图片</div><div class="rail recruit">招聘：证据、岗位与评级</div></div>
     </div>
   </header>
 
   <div class="shell status-strip" aria-label="当前实现状态">
-    <div><b>离线核心</b><span class="ok">25 项测试通过</span></div>
-    <div><b>微信读书会话</b><span class="pending">验收浏览器已登录；应用专用会话未建立</span></div>
-    <div><b>真实双日报</b><span class="pending">尚未验证</span></div>
+    <div><b>代码与离线核心</b><span class="ok">38 项测试通过</span></div>
+    <div><b>两个真实来源</b><span class="pending">适配器完成，订阅地址待配置验收</span></div>
+    <div><b>真实邮件送达</b><span class="pending">默认关闭，尚未发信</span></div>
   </div>
 
   <main class="shell">
     <section>
       <div><h2>现在能做什么</h2><div class="utility">ACTUAL CAPABILITIES</div></div>
       <div>
-        <p>源码刻意保持为 8 个职责文件：核心规则、来源处理、Agnes、招聘分析、流水线、报告、调度和入口。小概念直接放回所属流程，避免为了“架构完整”增加跳转。</p>
+        <p>源码保持为少量职责文件：核心规则、来源处理、流水线、报告、调度、邮件交付、招聘分析、Agnes 和入口。只增加了职责独立的邮件模块，没有引入 Web 服务、任务队列或插件框架。</p>
         <div class="map">
-          <div class="card"><strong>共同入口</strong>解析账号与时间配置，冻结 86400 秒窗口，区分发现、抓取、分析与发布状态。</div>
-          <div class="card"><strong>练习轨</strong>按包含词与排除词筛标题，净化正文，保留安全图片；绝不运行 OCR 或模型。</div>
-          <div class="card"><strong>招聘轨</strong>本地 OCR 包装、Agnes 固定模型协议、严格 Schema/证据引用、岗位—地点关系和代码评级。</div>
-          <div class="card"><strong>运行保障</strong>SQLite 原子认领、跨进程去重、预览隔离、不可变运行版本与固定报告入口。</div>
+          <div class="card"><strong>单一来源</strong>每个账号绑定一个由环境变量提供的 RSS/Atom 地址；Feed 只给候选，原文身份、标题和发布时间才是收录依据。</div>
+          <div class="card"><strong>完整原文</strong>正文经过白名单清理，图片流式限额下载并留在原位置；练习缺关键图会等待补收，招聘仍保留可读原文。</div>
+          <div class="card"><strong>运行保障</strong>SQLite 原子认领、稳定文章键、有限迟到补收、同一 run_id、完整版本清单和单一固定入口。</div>
+          <div class="card"><strong>一个交付渠道</strong>SMTP 默认关闭；邮件使用 CID 内嵌本地图片。明确失败可只重发报告，结果不确定不会自动重发。</div>
         </div>
-        <div class="callout"><strong>真实限制：</strong>用户提供的两篇微信原文已能由应用浏览器读取标题、公众号、精确时间和正文，但仅凭公众号名发现当天全部文章仍未通过。微信读书网页只观察到电子书搜索；搜狗微信会触发反自动化验证、遗漏新文并返回不稳定链接。调度器不会在来源未验证时生成虚假的零结果。Agnes 合成协议探针已经通过，但真实 OCR 图片、招聘文章抽取、双日报和配置分钟运行仍待验收。</div>
+        <div class="callout"><strong>真实限制：</strong>代码已能消费 RSS/Atom，但本机尚未配置“国聘”和“我爱学逻辑”的真实 Feed，也没有验证其多篇覆盖和发现延迟。真实邮箱没有被使用；真实定时送达、真实双日报、招聘图片 OCR 与文章抽取仍待人工验收。离线通过不等于公众号订阅或收件已通过。</div>
       </div>
     </section>
 
@@ -101,9 +101,11 @@
         <ol class="steps">
           <li>在项目目录创建隔离环境。<div class="command">py -3.12 -m venv .venv</div></li>
           <li>安装锁定依赖。首次安装包含本地 OCR 运行时，耗时会更长。<div class="command">.venv\Scripts\python.exe -m pip install -r requirements.lock</div></li>
-          <li>复制配置样例，只在本机填写公众号和时间。<div class="command">Copy-Item config\accounts.example.toml config\accounts.toml
+          <li>复制配置样例，只在本机填写公众号、来源绑定和时间。<div class="command">Copy-Item config\accounts.example.toml config\accounts.toml
 Copy-Item config\settings.example.toml config\settings.toml</div></li>
-          <li>如需 Agnes，在当前终端设置 Key。Key 不写入源码、报告或日志。<div class="command">$env:AGNES_API_KEY = "在本机填写"</div></li>
+          <li>把两个真实订阅地址放进环境变量。含 Token 的完整地址不会写入 SQLite、报告或日志。<div class="command">$env:PRACTICE_FEED_URL = "https://你的来源/练习.xml"
+$env:RECRUITMENT_FEED_URL = "https://你的来源/招聘.xml"</div></li>
+          <li>邮件默认关闭。需要时先在 <code>config/settings.toml</code> 启用，再设置发件人、收件人、账号和密码环境变量；不要把密码写进 TOML。</li>
         </ol>
       </div>
     </section>
@@ -113,12 +115,19 @@ Copy-Item config\settings.example.toml config\settings.toml</div></li>
       <div>
         <p>双击 <code>start.cmd</code>，或在终端运行：</p>
         <div class="command">.venv\Scripts\python.exe -m app.cli</div>
-        <p>当前菜单可检查微信读书页面状态、生成离线合成样例和打开报告目录。真实来源适配器通过验证前，菜单会拒绝启动正式调度。</p>
+        <p>先检查配置，再做隔离预览；只有配置完整时调度入口才会启动：</p>
+        <div class="command">.venv\Scripts\python.exe -m app.cli check
+.venv\Scripts\python.exe -m app.cli preview --kind both
+.venv\Scripts\python.exe -m app.cli schedule</div>
+        <p>邮件明确失败后，只重发已有完整报告；不会重新发现、下载、OCR 或调用模型：</p>
+        <div class="command">.venv\Scripts\python.exe -m app.cli retry-send &lt;run_id&gt;</div>
+        <p>旧进程确认停止且运行目录有完整清单时，可显式恢复记录：</p>
+        <div class="command">.venv\Scripts\python.exe -m app.cli recover-report &lt;run_id&gt; --confirm-stopped</div>
         <h3>开发验证</h3>
         <div class="command">.venv\Scripts\python.exe -m pytest -ra
 .venv\Scripts\ruff.exe check app tests
 .venv\Scripts\python.exe -m compileall -q app tests</div>
-        <p>合成样例位于 <code>samples/preview/</code>，页面上明确写明不是微信或 Agnes 实测。</p>
+        <p>合成样例位于 <code>samples/preview/</code>，页面上明确写明不是微信、真实订阅、SMTP 或 Agnes 实测。</p>
       </div>
     </section>
 
@@ -126,15 +135,15 @@ Copy-Item config\settings.example.toml config\settings.toml</div></li>
       <div><h2>数据边界</h2><div class="utility">LOCAL BY DEFAULT</div></div>
       <div>
         <ul>
-          <li><code>data/</code>：浏览器会话、证据、OCR 文本和 SQLite 运行账本；不进 Git。</li>
+          <li><code>data/</code>：浏览器会话、临时资源、证据、OCR 文本和 SQLite 运行账本；不进 Git。</li>
           <li><code>output/preview/&lt;run_id&gt;/</code>：手动预览；不认领或覆盖正式任务。</li>
           <li><code>output/YYYY-MM-DD/</code>：正式固定入口；每次先完成不可变运行版本再替换入口。</li>
           <li>Agnes 仅接收本篇必要来源字段、正文纯文本、OCR 文本和证据 ID；不发送图片、Cookie、Key 或绝对路径。</li>
         </ul>
-        <p>程序与电脑必须保持运行，定时任务才会继续。项目不会擅自注册开机启动，也不会自动重跑错过或失败的整窗任务。</p>
+        <p>程序与电脑必须保持运行，定时任务才会继续。可选择“当天错过后补跑一次”，但已领取或失败的任务不会自动重跑；项目也不会擅自注册开机启动。</p>
       </div>
     </section>
   </main>
-  <footer><div class="shell">第一版只服务双日报闭环。MCP、RSS、Markdown 导出、FastAPI、网页后台与通用文章平台均不在范围内。</div></footer>
+  <footer><div class="shell">第一版只消费一个外部 RSS/Atom 来源，不建设 RSS 平台。MCP、Markdown 导出、FastAPI、网页后台、多渠道和通用文章平台均不在范围内。</div></footer>
 </body>
 </html>

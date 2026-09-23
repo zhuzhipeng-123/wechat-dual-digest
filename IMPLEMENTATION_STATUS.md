@@ -1,67 +1,92 @@
 # Implementation status
 
-Updated: 2026-09-20
+Updated: 2026-09-23
 
-## Confirmed scope
+## Delivery level
 
-- The one-time project rules and operating defaults were confirmed by the user on 2026-09-20.
-- First release is the dual-digest MVP only. MCP, RSS, Markdown export, FastAPI, a web administration UI, and generic article-platform features remain out of scope.
+- **Code complete for the implementable A-D scope:** yes.
+- **Offline verification complete:** yes, for the cases listed below.
+- **Real target-account source verified:** no; real Feed URLs have not been configured.
+- **Real email received:** no; SMTP remained disabled and no message was sent.
+- **Real recruitment OCR/Agnes analysis verified:** no; stage E remains separate.
 
-## Implemented
+This is not a claim that unattended WeChat subscription and delivery already works in the user environment. The remaining real checks require a source that actually covers the two target accounts and explicit authorization/configuration for email.
 
-- Python 3.12 project, fully pinned Windows environment, ignored local runtime paths, blank config examples, and `start.cmd`.
-- Application code reduced from 19 small modules to 8 cohesive responsibility modules, plus `__init__.py`.
-- Typed contracts for frozen runs, candidates, articles, images, errors, and reports.
-- Strict `Asia/Shanghai` settings and ordered recruitment/practice account configuration.
-- Exact 86400-second `[start, end)` windows, practice title rules, exact account matching, and candidate de-duplication.
-- Safe WeChat article/image URL policies, original HTML parsing, precise-time extraction probes, sanitization, and bounded image download helpers.
-- Practice report pipeline and recruitment no-model degradation with distinct source/fetch/analysis states.
-- Local RapidOCR wrapper; fixed Agnes Chat Completions client; strict JSON/Schema/source/evidence validation; job-location relationships; code-owned P0-P3 rating.
-- Static recruitment/practice HTML and JSON, isolated preview paths, immutable run versions, and fixed official entry replacement.
-- SQLite run ledger, atomic per-window claims, duplicate prevention, bounded two-worker scheduler, and failed-run persistence.
-- Console entry for login probe, offline samples, opening reports, and an explicit refusal to schedule while real discovery is unverified.
-- `README.html` generated under the frontend-design workflow and two clearly labeled synthetic sample reports.
+## Baseline before this change
 
-## Offline verification
-
-All results below are local/offline or synthetic unless explicitly marked otherwise.
-
-- `.venv\Scripts\python.exe -m pytest -ra` → exit 0, 25 passed, 0 failed, 0 skipped.
-- `.venv\Scripts\ruff.exe check app tests` → exit 0, all checks passed.
-- `.venv\Scripts\ruff.exe format --check app tests` → exit 0, 12 files already formatted after consolidation.
-- Offline tests install an automatic socket guard; any attempted TCP connection fails the test.
+- Branch and commit: `main` at `b6b415f32e5c2cabb3dbadc11ae38510f4e7ce79`.
+- Existing uncommitted user material: untracked `11/`; preserved and not edited.
+- `.venv\Scripts\python.exe -m pytest -ra` → exit 0, 25 passed.
+- `.venv\Scripts\ruff.exe check app tests` → exit 0.
+- `.venv\Scripts\ruff.exe format --check app tests` → exit 0, 12 files already formatted.
 - `.venv\Scripts\python.exe -m compileall -q app tests` → exit 0.
-- RapidOCR was executed against `data/verification/synthetic-recruitment.png` → exit 0; it recognized both synthetic Chinese lines with confidence above 0.99. This is not a real WeChat image test.
-- Real Chromium opened the two synthetic sample reports at desktop and 390 px mobile widths. Both reports had no horizontal overflow and no console errors after the favicon fix.
-- Real Chromium opened `README.html`; desktop visual inspection passed. A mobile command-block overflow was found, fixed, and rechecked at 390 px with `scrollWidth=375` and no console errors.
 
-## Real verification
+The improvement plan's main findings were still present: production used no real discoverer, scheduling was permanently refused, images were not placed into immutable report assets, recruitment lacked full-text fallback, and there was no cross-run article ledger or delivery step. Existing original-page parsing, task claiming, templates, Agnes validation, and immutable run directories were retained.
 
-- WeRead web session in the browser used for acceptance inspection: login cookies and logged-in page state observed.
-- Application-owned persistent browser profile: not logged in or verified; it is separate from the acceptance browser session.
-- Public-account discovery: failed/unverified. The current logged-in `weread.qq.com` search returned electronic books and full-text book matches, not public-account articles. No public-account discovery entry was observed.
-- Direct original-page access: passed for both user-supplied links in the acceptance browser and in the application-owned headless Chrome profile. Titles, exact account names, exact publication times, body content, and images were observable.
-- Additional original articles: passed for one linked `我爱学逻辑` article and one `国聘` article reached through a public search result.
-- Sogou WeChat discovery probe: unsuitable for official scheduling. Browser automation was redirected to an anti-spider CAPTCHA; plain HTTP search omitted the supplied newest articles under generic account queries, returned unstable signed links, and produced too many stale candidates. A live preview attempt was stopped after more than two minutes rather than publishing an unreliable result.
-- Official Tencent terms found during verification describe the client syncing collected/floating-window/followed-public-account articles, but no official public web article-search entry was found.
-- Known URLs → original → exact publication time: verified for both tracks. Account-name-only discovery → the same known URLs remains unverified.
-- Local OCR on a real recruitment image: not verified.
-- Agnes protocol: passed with one real synthetic request to the fixed service and model. Input contained no article, account, image, Cookie, or path; `max_tokens=120`; response model was `agnes-2.5-flash`, content was `{"probe":"ok"}`, and usage was 335 total tokens. The reference Key was loaded only into that child process and was not copied or printed.
-- Real recruitment article extraction: not verified because no real account/article evidence is available.
-- Real practice/recruitment reports: not verified.
-- Real configured-minute scheduling, duplicate launch, source failure, model timeout, and publication-interruption drills: not verified.
+## Implemented in this change
 
-## Known gaps and impact
+### Source and original content
 
-- Stage A does not pass: the planned sole discovery source is not available on the verified web surface. The code intentionally does not guess hidden endpoints or selectors.
-- Without a verified discovery adapter, official scheduling remains disabled; enabling it would risk false zero-result reports.
-- Ignored local configuration now uses recruitment account `国聘`, practice account `我爱学逻辑`, title keyword `每日一题`, and the 21:00 schedules. These values are confirmed by the supplied originals, but account-name-only discovery is not reliable enough to enable scheduling.
-- B and C have offline implementations and evidence, but their real acceptance conditions remain open because A and the required user-owned inputs are missing.
+- One RSS/Atom consumer, configured per account through an environment-variable name in TOML. It distinguishes valid empty sources, authentication/HTML responses, malformed XML, network failure, and unsafe cross-origin redirects.
+- Feed labels, titles, and dates remain hints. Formal inclusion uses the original WeChat page's exact account, title, and publication time. A missing original account is not filled from `expected_account`.
+- Stable article identity uses token paths or identity-bearing WeChat query fields; original fetch URLs are retained separately.
+- HTML uses a tag/attribute allowlist that also cleans the content root. Article and Feed bodies have size limits.
+- Images use validated HTTPS hosts, per-redirect checks, streaming 12 MiB limits, an 80 MiB run limit, generated safe filenames, hashes, and original-position replacement. Repeated references reuse one file without appending a duplicate gallery.
+- Practice articles with missing images remain pending and retryable. Recruitment reports keep sanitized full original text and available images when analysis is disabled or fails.
 
-## Next action
+### Collection, publication, and delivery
 
-1. Choose a discovery channel with an explicit completeness expectation: an authenticated WeChat-capable source, a third-party provider with accepted miss/availability risk, or user-forwarded/direct URLs.
-2. Only after that choice, connect the verified original-page reader to scheduled reports and run the configured-minute/duplicate/failure drills.
-3. Run a real practice report and a no-model recruitment report from discovered—not manually seeded—articles.
-4. Use the already verified reference Key only after real article evidence exists; keep each article call text-only and budgeted.
-5. Run real image OCR, recruitment extraction, configured-minute scheduling, browser review, and fault drills.
+- A bounded late-arrival range is separate from the fixed 24-hour main window. Preview does not consume formal collection state.
+- SQLite migrations are repeatable and preserve the existing `runs` table. A thin `articles` table records formal collection; only a complete published report consumes an article.
+- The claim's `run_id` is reused by the ledger, report directory, JSON, manifest, article records, and delivery record.
+- A complete run directory is written first with HTML, JSON, assets, and `.complete.json`. Only then is the single fixed HTML entry atomically replaced.
+- SMTP is the only delivery channel. It is disabled by default, uses environment variables for secrets, creates a multipart message with CID images, and rejects messages over 20 MiB instead of silently dropping content.
+- Delivery states distinguish `not_requested`, `pending`, `sending`, `sent`, `failed`, and `unknown`. Automatic retry is limited to pending/failed. A forced retry of sent/unknown requires an explicit flag and warns about duplicates.
+- `retry-send` reads an existing complete report and does not discover, fetch, OCR, or call a model.
+
+### Scheduling and recovery
+
+- The real Feed runner is connected to the two-worker scheduler; Demo and WeRead probes are not formal inputs.
+- Startup checks require enabled accounts, stable account keys, configured Feed environment variables, writable runtime paths, and complete SMTP settings when delivery is enabled.
+- Optional same-day catch-up only claims an unclaimed task. Existing failed, running, or uncertain runs are not automatically reset.
+- Schedule changes are stored and take effect the next day. Each claim stores a secret-safe snapshot; the worker reconstructs its task/accounts/delivery settings from that frozen snapshot.
+- The cooperative total budget starts at claim time. Network calls remain individually bounded; Python threads and local OCR are not falsely described as hard-cancelled.
+- Suspicious `claimed`, `running`, or `sending` rows are listed but never auto-stolen. `recover-report <run_id> --confirm-stopped` only reconciles a matching complete manifest after the user confirms the old process stopped; it does not refetch or resend.
+
+### Commands
+
+```powershell
+.venv\Scripts\python.exe -m app.cli check
+.venv\Scripts\python.exe -m app.cli preview --kind both
+.venv\Scripts\python.exe -m app.cli schedule
+.venv\Scripts\python.exe -m app.cli retry-send <run_id>
+.venv\Scripts\python.exe -m app.cli recover-report <run_id> --confirm-stopped
+```
+
+The menu remains available through `start.cmd` or `.venv\Scripts\python.exe -m app.cli`. `probe-login` remains a diagnostic only. `samples` remains explicitly synthetic.
+
+## Offline verification after this change
+
+All tests use fixed clocks, temporary directories, `httpx` mock transports, fake SMTP, and an automatic socket guard.
+
+- `.venv\Scripts\python.exe -m pytest -ra` → exit 0, 38 passed, 0 failed, 0 skipped.
+- `.venv\Scripts\ruff.exe check app tests` → exit 0, all checks passed.
+- `.venv\Scripts\ruff.exe format --check app tests` → exit 0, 14 files already formatted.
+- `.venv\Scripts\python.exe -m compileall -q app tests` → exit 0.
+- `.venv\Scripts\python.exe -m app.cli --help` → commands were registered.
+- `.venv\Scripts\python.exe -m app.cli check` → intentionally non-zero with the existing ignored local config because both accounts lack the new source bindings; no Feed URL or SMTP secret was printed.
+
+New tests cover RSS/Atom items and valid emptiness, login pages, malformed sources, cross-origin redirects, streaming Feed cut-off, missing original identity, original-title filtering, duplicate URLs with inconsistent Feed GUIDs, in-place repeated images, streaming image cut-off, bounded late collection, pre-fetch cross-run skip, pre-discovery budget expiry, disabled-task configuration, hostless Feed rejection, practice incomplete-image retry, recruitment full-text fallback, manifest publication, portable CID email with repeated-asset reuse, sent/failed/unknown states, no automatic unknown resend, idempotent migration, snapshot redaction, next-day schedule activation, same-day catch-up semantics, unified run ID, formal collection after complete publication, and explicit report recovery.
+
+## Real verification still open
+
+1. Configure `PRACTICE_FEED_URL` and `RECRUITMENT_FEED_URL` for sources that actually include “我爱学逻辑” and “国聘”.
+2. For each account, compare a multi-article or limited-history sample and record identity match, discovered/missed counts, publication-to-discovery delay, content/image completeness, and source failure behavior.
+3. Run a real practice preview and recruitment preview with analysis disabled; inspect original order and images in a browser.
+4. Explicitly configure and authorize SMTP, run one real send, and verify the received HTML and images on the intended device. SMTP `sent` only means the service accepted the message.
+5. Keep the program running across a configured minute and verify claim time, frozen window, report completion, duplicate prevention, catch-up, source failure, and interrupted recovery.
+6. Stage E: separately validate real recruitment images with OCR and real article evidence with the existing fixed Agnes service/model. No paid call was made in this change.
+
+## Intentionally not added
+
+No FastAPI/REST server, Web administration UI, Redis/Celery, multiple source providers, source auto-fallback, multiple delivery channels, RSS publishing, MCP, generic crawler/database, vector store, or multi-agent system was added. The project remains a local single-user tool.

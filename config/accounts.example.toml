@@ -1,7 +1,13 @@
 [[recruitment]]
 name = "国聘"
+enabled = true
+account_key = "recruitment-guopin"
+feed_url_env = "RECRUITMENT_FEED_URL"
 
 [[practice]]
 name = "我爱学逻辑"
+enabled = true
+account_key = "practice-logic"
+feed_url_env = "PRACTICE_FEED_URL"
 include = ["每日一题"]
 exclude = []

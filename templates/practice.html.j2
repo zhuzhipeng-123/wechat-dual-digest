@@ -5,11 +5,11 @@
   {% if report.articles %}
     {% for article in report.articles %}<article>
       <h2>{{ article.title }}</h2><p>{{ article.account }} · {{ article.publish_time }}</p>
-      <div>{{ article.sanitized_html|safe }}</div>
-      {% for image in article.images|default([]) %}{% if image.status == "ok" %}<img src="{{ image.relative_path }}" alt="{{ article.title }}配图">{% endif %}{% endfor %}
+      {% if article.late_arrival %}<span class="tag">迟到补收</span>{% endif %}
+      <div class="article-body">{{ article.sanitized_html|safe }}</div>
       <p><a href="{{ article.url }}" rel="noopener noreferrer">打开唯一原文入口</a></p>
     </article>{% endfor %}
   {% elif report.source_status.value == "empty" %}<p class="notice">本次搜索成功，但未发现命中标题规则的练习文章。</p>
   {% else %}<p class="notice">本次无法确认是否有练习文章，请查看数据源状态和错误。</p>{% endif %}
-  {% for article in report.pending %}<article><h2>{{ article.title }}</h2><p>时间或正文待核实，不计入正式窗口。</p><a href="{{ article.url }}" rel="noopener noreferrer">打开唯一原文入口</a></article>{% endfor %}
+  {% for article in report.pending %}<article><h2>{{ article.title }}</h2><p>{{ article.reason|default('时间或正文待核实，不计入正式窗口。') }}</p>{% if article.sanitized_html is defined %}<div class="article-body">{{ article.sanitized_html|safe }}</div>{% endif %}<a href="{{ article.url }}" rel="noopener noreferrer">打开唯一原文入口</a></article>{% endfor %}
 {% endblock %}

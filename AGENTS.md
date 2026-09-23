@@ -2,9 +2,9 @@
 
 ## Project
 
-Build a local Windows tool that discovers WeChat articles through a logged-in WeRead session, then produces practice and recruitment HTML/JSON reports on a daily schedule. `EXECUTION_PLAN.md` defines the first-release scope.
+Build a local Windows tool that consumes one explicitly configured and verified WeChat article source, then produces and optionally emails practice and recruitment HTML/JSON reports on a daily schedule. `EXECUTION_PLAN.md` defines the first-release scope.
 
-Do not implement deferred platform features merely because the legacy specification lists them. This release does not include FastAPI, REST APIs, MCP, RSS, Markdown export, a web administration UI, a generic article database, or a generic WeChat article platform.
+Do not implement deferred platform features merely because the legacy specification lists them. This release may consume one RSS/Atom source but does not build an RSS platform. It does not include FastAPI, REST APIs, MCP, Markdown export, a web administration UI, a generic article database, or a generic WeChat article platform.
 
 ## Structure and stack
 
@@ -17,7 +17,7 @@ Do not implement deferred platform features merely because the legacy specificat
 ## Confirmed behavior
 
 - Use `Asia/Shanghai` in the first release. General DST-region scheduling is not promised.
-- Scheduled public-account discovery is still unverified. Sogou WeChat may be used only as an explicit best-effort probe because it can omit new articles, return unstable signed links, or require anti-bot verification; do not enable official scheduling from it.
+- Formal discovery uses one user-configured RSS/Atom source binding per account. Source coverage remains unverified until real target accounts pass identity, multi-article, timeliness, and failure checks. Sogou and Demo data are never formal sources.
 - Treat every candidate source's account labels and displayed dates as untrusted hints; accept an article only after the original WeChat page confirms the exact account and publication time.
 - A manually supplied URL remains an isolated preview or probe and must not be mistaken for scheduled discovery.
 - Verify original article content and exact publication time; never invent timestamps. Introduce WeChat Official Accounts Platform login only if the verified fetching method needs it.
@@ -28,9 +28,11 @@ Do not implement deferred platform features merely because the legacy specificat
 - Rate a company using the best city among all of its campus full-time opportunities, not only AI-related jobs.
 - Determine recruitment openness at the frozen window end from original evidence. Keep uncertain cases as pending verification.
 - Manual generation is an isolated preview under `output/preview/<run_id>/`; it does not claim or overwrite an official scheduled run.
+- Formal runs may look back a bounded number of hours for verified, not-yet-collected late articles. Preview never consumes collection state.
 - Schedule changes take effect on the next day. An already claimed run keeps its frozen window and configuration snapshot.
 - Persist scheduled execution state and prevent duplicate official runs across processes.
 - Distinguish discovery, fetch, analysis, coverage, and publication failures. Never turn a failure into a false zero-result claim.
+- SMTP is the only delivery channel in this release. It is disabled by default; generation and delivery are separate, and resending reuses an existing complete report.
 
 ## Workflow
 

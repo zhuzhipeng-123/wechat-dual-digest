@@ -35,6 +35,18 @@ def test_title_rules_and_candidate_deduplication() -> None:
     ]
     assert [item.title for item in deduplicate_candidates(candidates)] == ["A"]
 
+    same_article = [
+        Candidate("练习号", "A", "https://mp.weixin.qq.com/s/stable-token", now, "guid-1"),
+        Candidate(
+            "练习号",
+            "A duplicate",
+            "https://mp.weixin.qq.com/s/stable-token?tracking=changed",
+            now,
+            "guid-2",
+        ),
+    ]
+    assert [item.title for item in deduplicate_candidates(same_article)] == ["A"]
+
 
 @pytest.mark.parametrize(
     ("employer_type", "scale", "location", "expected"),

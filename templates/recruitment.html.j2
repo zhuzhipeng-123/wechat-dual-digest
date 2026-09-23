@@ -5,6 +5,8 @@
   {% if report.analysis_status.value != "ok" %}<p class="notice">分析待补充。原文已保留，但当前结果不得解释为“没有招聘”。</p>{% endif %}
   {% for article in report.articles %}<article>
     <h2>{{ article.title }}</h2><p>{{ article.account }} · {{ article.publish_time }}</p>
+    {% if article.late_arrival %}<span class="tag">迟到补收</span>{% endif %}
+    <div class="article-body">{{ article.sanitized_html|safe }}</div>
     {% for company in article.companies|default([]) %}<section>
       <h3><span class="tag">{{ company.rating }}</span>{{ company.company }}</h3>
       <p>{{ company.employer_type }} · {{ company.company_scale }}</p>

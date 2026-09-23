@@ -4,12 +4,27 @@ total_timeout_seconds = 1800
 [recruitment]
 enabled = true
 schedule = "21:00"
-analysis_enabled = true
+analysis_enabled = false
+catch_up_today = false
+late_lookback_hours = 72
 
 [practice]
 enabled = true
 schedule = "21:00"
+catch_up_today = false
+late_lookback_hours = 72
 
 [browser]
 channel = "chrome"
 headless = false
+
+[delivery]
+enabled = false
+channel = "smtp"
+host = "smtp.example.com"
+port = 465
+security = "ssl"
+sender_env = "DIGEST_MAIL_FROM"
+recipient_env = "DIGEST_MAIL_TO"
+username_env = "DIGEST_SMTP_USER"
+password_env = "DIGEST_SMTP_PASSWORD"

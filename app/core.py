@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import ipaddress
 import re
 import tomllib
@@ -9,7 +10,7 @@ from datetime import date, datetime, time, timedelta
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import parse_qs, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 TaskKind = Literal["recruitment", "practice"]
@@ -32,6 +33,15 @@ class StageStatus(StrEnum):
     NEEDS_VERIFICATION = "needs_verification"
 
 
+class DeliveryStatus(StrEnum):
+    NOT_REQUESTED = "not_requested"
+    PENDING = "pending"
+    SENDING = "sending"
+    SENT = "sent"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
 @dataclass(frozen=True)
 class FrozenWindow:
     start: datetime
@@ -49,6 +59,9 @@ class AccountConfig:
     name: str
     include: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
+    enabled: bool = True
+    account_key: str = ""
+    feed_url_env: str = ""
 
 
 @dataclass(frozen=True)
@@ -104,9 +117,14 @@ class DigestReport:
     generated_at: datetime
     source_status: StageStatus
     analysis_status: StageStatus
+    fetch_status: StageStatus = StageStatus.NOT_RUN
+    coverage_status: StageStatus = StageStatus.NEEDS_VERIFICATION
+    publication_status: StageStatus = StageStatus.NOT_RUN
+    delivery_status: DeliveryStatus = DeliveryStatus.NOT_REQUESTED
     articles: list[dict[str, Any]] = field(default_factory=list)
     pending: list[dict[str, Any]] = field(default_factory=list)
     errors: list[StageError] = field(default_factory=list)
+    stats: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -125,6 +143,8 @@ class TaskSettings:
     enabled: bool
     schedule: str
     analysis_enabled: bool = False
+    catch_up_today: bool = False
+    late_lookback_hours: int = 72
 
 
 @dataclass(frozen=True)
@@ -134,12 +154,26 @@ class BrowserSettings:
 
 
 @dataclass(frozen=True)
+class DeliverySettings:
+    enabled: bool = False
+    channel: str = "smtp"
+    host: str = ""
+    port: int = 465
+    security: str = "ssl"
+    sender_env: str = "DIGEST_MAIL_FROM"
+    recipient_env: str = "DIGEST_MAIL_TO"
+    username_env: str = "DIGEST_SMTP_USER"
+    password_env: str = "DIGEST_SMTP_PASSWORD"
+
+
+@dataclass(frozen=True)
 class AppSettings:
     timezone: str
     total_timeout_seconds: int
     recruitment: TaskSettings
     practice: TaskSettings
     browser: BrowserSettings
+    delivery: DeliverySettings
 
 
 @dataclass(frozen=True)
@@ -165,10 +199,41 @@ def _task_settings(data: dict, section: str) -> TaskSettings:
     schedule = str(raw.get("schedule", ""))
     if not _SCHEDULE_PATTERN.fullmatch(schedule):
         raise ConfigurationError(f"[{section}].schedule 必须是 HH:MM")
+    lookback = raw.get("late_lookback_hours", 72)
+    if not isinstance(lookback, int) or not 0 <= lookback <= 168:
+        raise ConfigurationError(f"[{section}].late_lookback_hours 必须是 0 到 168 的整数")
     return TaskSettings(
         enabled=bool(raw.get("enabled", True)),
         schedule=schedule,
         analysis_enabled=bool(raw.get("analysis_enabled", False)),
+        catch_up_today=bool(raw.get("catch_up_today", False)),
+        late_lookback_hours=lookback,
+    )
+
+
+def _delivery_settings(data: dict) -> DeliverySettings:
+    raw = data.get("delivery", {})
+    if not isinstance(raw, dict):
+        raise ConfigurationError("[delivery] 必须是对象")
+    channel = str(raw.get("channel", "smtp")).strip().lower()
+    security = str(raw.get("security", "ssl")).strip().lower()
+    port = raw.get("port", 465)
+    if channel != "smtp":
+        raise ConfigurationError("首版 delivery.channel 只能是 smtp")
+    if security not in {"ssl", "starttls"}:
+        raise ConfigurationError("delivery.security 只能是 ssl 或 starttls")
+    if not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ConfigurationError("delivery.port 必须是有效端口")
+    return DeliverySettings(
+        enabled=bool(raw.get("enabled", False)),
+        channel=channel,
+        host=str(raw.get("host", "")).strip(),
+        port=port,
+        security=security,
+        sender_env=str(raw.get("sender_env", "DIGEST_MAIL_FROM")).strip(),
+        recipient_env=str(raw.get("recipient_env", "DIGEST_MAIL_TO")).strip(),
+        username_env=str(raw.get("username_env", "DIGEST_SMTP_USER")).strip(),
+        password_env=str(raw.get("password_env", "DIGEST_SMTP_PASSWORD")).strip(),
     )
 
 
@@ -194,6 +259,7 @@ def load_settings(path: Path) -> AppSettings:
         recruitment=_task_settings(data, "recruitment"),
         practice=_task_settings(data, "practice"),
         browser=BrowserSettings(channel=channel, headless=bool(browser.get("headless", False))),
+        delivery=_delivery_settings(data),
     )
 
 
@@ -224,7 +290,24 @@ def load_accounts(path: Path) -> Accounts:
             )
             if group == "practice" and not include:
                 raise ConfigurationError(f"practice[{index}] 至少需要一个 include 关键词")
-            result.append(AccountConfig(name=name, include=include, exclude=exclude))
+            account_key = str(raw.get("account_key", "")).strip()
+            feed_url_env = str(raw.get("feed_url_env", "")).strip()
+            if account_key and not re.fullmatch(r"[a-z0-9][a-z0-9_-]{1,63}", account_key):
+                raise ConfigurationError(
+                    f"{group}[{index}].account_key 只能使用 2-64 位小写字母、数字、_、-"
+                )
+            if feed_url_env and not re.fullmatch(r"[A-Z][A-Z0-9_]{1,63}", feed_url_env):
+                raise ConfigurationError(f"{group}[{index}].feed_url_env 不是有效环境变量名")
+            result.append(
+                AccountConfig(
+                    name=name,
+                    include=include,
+                    exclude=exclude,
+                    enabled=bool(raw.get("enabled", True)),
+                    account_key=account_key,
+                    feed_url_env=feed_url_env,
+                )
+            )
         return tuple(result)
 
     accounts = Accounts(parse_group("recruitment"), parse_group("practice"))
@@ -259,6 +342,24 @@ def safe_article_url(value: str) -> str:
     return urlunparse(("https", ARTICLE_HOST, parsed.path, "", parsed.query, ""))
 
 
+def article_identity(value: str) -> str:
+    """Return a conservative stable key without discarding identity-bearing parameters."""
+    safe_url = safe_article_url(value)
+    parsed = urlparse(safe_url)
+    token = re.fullmatch(r"/s/(?P<token>[A-Za-z0-9_-]+)", parsed.path)
+    if token:
+        material = f"token:{token.group('token')}"
+    else:
+        query = parse_qs(parsed.query, keep_blank_values=False)
+        identity_names = ("__biz", "mid", "idx", "sn")
+        identity = [(name, query[name][0]) for name in identity_names if query.get(name)]
+        if {name for name, _ in identity} >= {"__biz", "mid", "idx"}:
+            material = f"query:{urlencode(identity)}"
+        else:
+            material = f"url:{safe_url}"
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
+
+
 def is_safe_image_url(value: str) -> bool:
     parsed = urlparse(value)
     if parsed.scheme != "https" or not parsed.hostname:
@@ -288,11 +389,18 @@ def practice_title_matches(title: str, account: AccountConfig) -> bool:
 
 
 def deduplicate_candidates(candidates: list[Candidate]) -> list[Candidate]:
-    seen: set[str] = set()
+    seen_candidate_ids: set[str] = set()
+    seen_article_ids: set[str] = set()
     result = []
     for candidate in candidates:
-        key = candidate.candidate_id or safe_article_url(candidate.url)
-        if key not in seen:
-            seen.add(key)
-            result.append(candidate)
+        candidate_id = candidate.candidate_id
+        article_id = article_identity(candidate.url)
+        if candidate_id and candidate_id in seen_candidate_ids:
+            continue
+        if article_id in seen_article_ids:
+            continue
+        if candidate_id:
+            seen_candidate_ids.add(candidate_id)
+        seen_article_ids.add(article_id)
+        result.append(candidate)
     return result
